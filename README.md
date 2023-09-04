@@ -1,2 +1,1 @@
-# huggingface_streamlit
-HuggingFace models + Streamlit
+# HuggingFace models + Streamlit
