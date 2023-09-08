@@ -3,13 +3,15 @@ import streamlit as st
 from streamlit_option_menu import option_menu
 
 from src.zero_shot_text_classification import ZeroShotTextClassification
+from src.named_entity_recognition import NamedEntityRecognition
 
 
 def setup():
     """Streamlit setup."""
 
     task_dict = {
-        "Zero-Shot Text Classification": ZeroShotTextClassification(),
+        "Named Entity Recognition": NamedEntityRecognition,
+        "Zero-Shot Text Classification": ZeroShotTextClassification,
         "Others": None,
     }
 
@@ -19,7 +21,7 @@ def setup():
     else:
         layout = "wide" if st.session_state.widen else "centered"
 
-    st.set_page_config(layout=layout, page_title="HuggingFace serving", page_icon="🤗")
+    st.set_page_config(layout=layout, page_title="HuggingFace tasks", page_icon="🤗")
 
     # Set up session state so app interactions don't reset the app.
     if "valid_inputs_received" not in st.session_state:
@@ -42,7 +44,10 @@ def setup():
         """[HuggingFace](https://huggingface.co/inference-api)."""
     )
 
-    return task_dict[st.session_state["task"]]
+    task_name = st.session_state["task"]
+    if task_name != "Others":
+        return task_dict[task_name](task_name)
+    return None
 
 
 if __name__ == "__main__":

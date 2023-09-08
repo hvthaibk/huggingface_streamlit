@@ -16,16 +16,17 @@ class ZeroShotTextClassification(HuggingFaceTask):
     # Adapted from:
     # https://www.charlywargnier.com/post/how-to-create-a-zero-shot-learning-text-classifier-using-hugging-face-and-streamlit
 
-    def __init__(self) -> None:
+    def __init__(self, name: str) -> None:
         super().__init__()
-        self.name = "Zero-Shot Text Classifier"
+
+        self.name = name
         self.api_url = None
         self.max_lines = 5
 
         sample_text = [
-            "I want to buy something in this store",
-            "This book is interesting",
-            "My internet connection is terribly slow",
+            "I want to buy something in this store.",
+            "This book is interesting.",
+            "My internet connection is terribly slow.",
         ]
         new_line = "\n"
         self.sample_input = f"{new_line.join(map(str, sample_text))}"
@@ -34,40 +35,31 @@ class ZeroShotTextClassification(HuggingFaceTask):
         """Setup function."""
         st.title(self.name)
 
-        str1 = "Classify keyphrases on-the-fly. No ML training needed!"
-        str2 = "Create labels (e.g. `Positive`, `Negative`, `Neutral`) and paste your keyphrases!"
-        st.markdown("\n" + str1 + "\n\n" + str2 + "\n\n")
+        st.write("Classify keyphrases on-the-fly. No ML training needed!")
 
         st.markdown("### Input")
         checkpoint = st.text_input("Model checkpoint", "valhalla/distilbart-mnli-12-3")
         self.api_url = self.api_root + checkpoint
-        st.write("API URL: ", self.api_url)
+        st.write("API endpoint: ", self.api_url)
 
         st.caption("")
 
     def _get_input(self):
-        """Get input from App's interface."""
         with st.form(key="my_form"):
             labels = st_tags(
-                label="",
+                label="Create labels (e.g. `Positive`, `Negative`, `Neutral`)",
                 text="Add labels - 3 max",
                 value=["Positive", "Negative", "Neutral"],
                 maxtags=3,
             )
 
             input_text = st.text_area(
-                "Enter keyphrases to classify",
-                self.sample_input,
-                height=200,
-                key="2",
-                help="At least two keyphrases for the classifier to work, one per line, "
-                + str(self.max_lines)
-                + " keyphrases max as part of the demo",
+                "Enter input keyphrases", self.sample_input, height=150
             )
 
-            text_lines = input_text.split("\n")  # A list of lines
-            text_lines = list(dict.fromkeys(text_lines))  # Remove dupes
-            text_lines = list(filter(None, text_lines))  # Remove empty
+            text_lines = input_text.split("\n")  # a list of lines
+            text_lines = list(dict.fromkeys(text_lines))  # remove dubplicates and empty
+            text_lines = list(filter(None, text_lines))
 
             if len(text_lines) > self.max_lines:
                 st.info(f"❄️  Only the first {self.max_lines} keyphrases are used.")
@@ -85,9 +77,13 @@ class ZeroShotTextClassification(HuggingFaceTask):
                 "options": {"wait_for_model": True},
             }
 
-            response = requests.post(
-                self.api_url, headers=self.headers, json=payload, timeout=10
-            )
+            try:
+                response = requests.post(
+                    self.api_url, headers=self.headers, json=payload, timeout=10
+                )
+            except requests.exceptions.Timeout:
+                st.error("HTTP connection time out. Please try again!", icon="🚨")
+                return []
 
             if response.status_code != 200:
                 st.error(f"Query error code: {response.status_code}", icon="🚨")
@@ -102,23 +98,23 @@ class ZeroShotTextClassification(HuggingFaceTask):
         return output
 
     def _process_output(self, output):
-        output = pd.DataFrame(data=output)
-
-        st.markdown("### Check classifier results")
+        st.markdown("### Output")
         st.checkbox(
             "Widen layout",
             key="widen",
             help="Tick this box to toggle the layout to 'Wide' mode",
         )
 
-        # This is a list comprehension to convert the decimals to percentages
+        output = pd.DataFrame(data=output)
+
+        # convert the decimals to percentages
         scores = [[f"{x:.2%}" for x in row] for row in output["scores"]]
         output["classification scores"] = scores
         output.drop("scores", inplace=True, axis=1)
 
         output.rename(columns={"sequence": "keyphrase"}, inplace=True)
 
-        # The code below is for ag-grid
+        # for ag-grid
         go_builder = GridOptionsBuilder.from_dataframe(output)
         go_builder.configure_default_column(
             enablePivot=True, enableValue=True, enableRowGroup=True
