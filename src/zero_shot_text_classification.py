@@ -3,24 +3,21 @@ from streamlit_tags import st_tags
 from st_aggrid import AgGrid, GridUpdateMode, DataReturnMode
 from st_aggrid.grid_options_builder import GridOptionsBuilder
 
-import requests
 import pandas as pd
 import streamlit as st
 
-from .hf_tasks import HuggingFaceTask
+from .hf_tasks import HuggingFaceTask, HuggingFaceTaskMixin
 
 
-class ZeroShotTextClassification(HuggingFaceTask):
+class ZeroShotTextClassification(HuggingFaceTask, HuggingFaceTaskMixin):
     """Zero-Shot Text Classification."""
 
     # Adapted from:
     # https://www.charlywargnier.com/post/how-to-create-a-zero-shot-learning-text-classifier-using-hugging-face-and-streamlit
 
     def __init__(self, name: str) -> None:
-        super().__init__()
+        super().__init__(name)
 
-        self.name = name
-        self.api_url = None
         self.max_lines = 5
 
         sample_text = [
@@ -53,49 +50,10 @@ class ZeroShotTextClassification(HuggingFaceTask):
                 maxtags=3,
             )
 
-            input_text = st.text_area(
-                "Enter input keyphrases", self.sample_input, height=150
-            )
-
-            text_lines = input_text.split("\n")  # a list of lines
-            text_lines = list(dict.fromkeys(text_lines))  # remove dubplicates and empty
-            text_lines = list(filter(None, text_lines))
-
-            if len(text_lines) > self.max_lines:
-                st.info(f"❄️  Only the first {self.max_lines} keyphrases are used.")
-                text_lines = text_lines[: self.max_lines]
-
+            text_lines = self.get_text(self.sample_input, self.max_lines)
             submit_button = st.form_submit_button(label="Submit")
+
             return submit_button, text_lines, labels
-
-    def _process_input(self, text_lines, labels):
-        output = []
-        for row in text_lines:
-            payload = {
-                "inputs": row,
-                "parameters": {"candidate_labels": labels},
-                "options": {"wait_for_model": True},
-            }
-
-            try:
-                response = requests.post(
-                    self.api_url, headers=self.headers, json=payload, timeout=10
-                )
-            except requests.exceptions.Timeout:
-                st.error("HTTP connection time out. Please try again!", icon="🚨")
-                return []
-
-            if response.status_code != 200:
-                st.error(f"Query error code: {response.status_code}", icon="🚨")
-                st.error(response.text, icon="🚨")
-                return []
-
-            output.append(response.json())
-
-        st.success("Finished querying HuggingFace API successfully!", icon="✅")
-        st.caption("")
-
-        return output
 
     def _process_output(self, output):
         st.markdown("### Output")
@@ -160,6 +118,6 @@ class ZeroShotTextClassification(HuggingFaceTask):
             if submit_button:
                 st.session_state.valid_inputs_received = True
 
-            output = self._process_input(text_lines, labels)
+            output = self.process_input(self.api_url, self.headers, text_lines, labels)
             if output:
                 self._process_output(output)
